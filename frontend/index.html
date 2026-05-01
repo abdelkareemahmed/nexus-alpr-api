@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus ALPR — v3.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            slate: {
+              950: '#020617',
+            }
+          },
+          animation: {
+            'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
+            'spin-slow': 'spin 0.8s linear infinite',
+            'fade-in-up': 'fade-in-up 0.4s ease-out forwards',
+            'toast-in': 'toast-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards',
+            'toast-out': 'toast-out 0.25s ease-in forwards',
+          },
+          keyframes: {
+            'pulse-dot': {
+              '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+              '50%': { opacity: '0.4', transform: 'scale(0.85)' },
+            },
+            'fade-in-up': {
+              '0%': { opacity: '0', transform: 'translateY(12px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            'toast-in': {
+              '0%': { opacity: '0', transform: 'translateY(16px) scale(0.95)' },
+              '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+            },
+            'toast-out': {
+              '0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+              '100%': { opacity: '0', transform: 'translateY(8px) scale(0.97)' },
+            },
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    html { font-size: 118%; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0a0f1a;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    .font-mono { font-family: 'JetBrains Mono', monospace !important; }
+
+    /* Subtle grid background */
+    .bg-grid {
+      background-image:
+        linear-gradient(rgba(30,58,138,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,58,138,0.07) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Glow effects */
+    .glow-blue { box-shadow: 0 0 0 1px rgba(37,99,235,0.3), 0 4px 24px rgba(37,99,235,0.12); }
+    .glow-emerald { box-shadow: 0 0 0 1px rgba(16,185,129,0.3), 0 4px 20px rgba(16,185,129,0.1); }
+    .glow-amber { box-shadow: 0 0 0 1px rgba(245,158,11,0.3), 0 4px 20px rgba(245,158,11,0.1); }
+    .glow-red { box-shadow: 0 0 0 1px rgba(239,68,68,0.3), 0 4px 20px rgba(239,68,68,0.1); }
+
+    /* Gate card */
+    .gate-card {
+      cursor: pointer;
+      border: 1.5px solid #1e293b;
+      background: #0f172a;
+      border-radius: 10px;
+      padding: 1.1rem 1.4rem;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .gate-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(37,99,235,0.06), transparent 60%);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .gate-card:hover { border-color: #334155; transform: translateY(-1px); }
+    .gate-card:hover::before { opacity: 1; }
+    .gate-card.active {
+      border-color: #2563eb;
+      background: linear-gradient(135deg, rgba(37,99,235,0.1), rgba(15,23,42,1) 70%);
+    }
+    .gate-card.active::before { opacity: 1; }
+    .gate-card.active .gate-icon { color: #3b82f6; }
+    .gate-card.active .gate-label { color: #93c5fd; }
+
+    /* Upload zone */
+    .upload-zone {
+      border: 1.5px dashed #1e3a5f;
+      border-radius: 10px;
+      background: #0b1526;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #2563eb;
+      background: rgba(37,99,235,0.05);
+    }
+    .upload-zone.has-file { border-style: solid; border-color: #1d4ed8; background: rgba(29,78,216,0.06); }
+
+    /* Spinner */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2.5px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Result card */
+    .result-card {
+      animation: fade-in-up 0.4s ease-out forwards;
+      border: 1px solid #1e293b;
+      background: #0f172a;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    /* Plate display */
+    .plate-display {
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.12em;
+      font-weight: 700;
+    }
+
+    /* Log box */
+    .log-box {
+      background: #070d1a;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      color: #94a3b8;
+    }
+    .log-box .log-prefix { color: #3b82f6; }
+
+    /* Data row */
+    .data-row { border-bottom: 1px solid #1e293b; }
+    .data-row:last-child { border-bottom: none; }
+
+    /* Toast */
+    .toast {
+      animation: toast-in 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+      backdrop-filter: blur(12px);
+    }
+    .toast.hiding { animation: toast-out 0.25s ease-in forwards; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    /* Section separator */
+    .section-sep {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, #1e3a5f 30%, #1e3a5f 70%, transparent);
+    }
+
+    /* Action button */
+    .action-btn {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      border: 1px solid #3b82f6;
+      transition: all 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .action-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .action-btn:hover:not(:disabled)::after { opacity: 1; }
+    .action-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(37,99,235,0.35); }
+    .action-btn:active:not(:disabled) { transform: translateY(0); }
+    .action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Badge */
+    .badge-vip { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+    .badge-standard { background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.25); }
+    .badge-warning { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+
+    /* Card accent bar */
+    .accent-vip { background: linear-gradient(90deg, #d97706, #f59e0b); }
+    .accent-standard { background: linear-gradient(90deg, #059669, #10b981); }
+    .accent-warning { background: linear-gradient(90deg, #dc2626, #ef4444); }
+
+    /* Fee highlight */
+    .fee-highlight { color: #34d399; font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+    /* Export button */
+    .export-btn {
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.25);
+      color: #34d399;
+      transition: all 0.2s ease;
+    }
+    .export-btn:hover {
+      background: rgba(16,185,129,0.2);
+      border-color: rgba(16,185,129,0.4);
+      transform: translateY(-1px);
+    }
+
+    /* Header top border */
+    .header-top { background: linear-gradient(90deg, transparent, #2563eb 30%, #3b82f6 50%, #2563eb 70%, transparent); height: 1.5px; }
+  </style>
+</head>
+<body class="bg-grid">
+
+  <!-- ═══════════════════════════════════ HEADER ═══════════════════════════════════ -->
+  <header class="sticky top-0 z-50" style="background: rgba(10,15,26,0.92); backdrop-filter: blur(16px); border-bottom: 1px solid #0f2044;">
+    <div class="header-top"></div>
+    <div class="max-w-4xl mx-auto px-5 py-3 flex items-center justify-between">
+      <!-- Brand -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center justify-center rounded-lg" style="width:34px;height:34px;background:linear-gradient(135deg,#1d4ed8,#1e3a8a);border:1px solid #2563eb;">
+          <!-- Camera/ALPR icon -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+            <circle cx="12" cy="13" r="3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold tracking-tight text-slate-100" style="font-size:0.95rem;letter-spacing:-0.01em;">Nexus ALPR</span>
+            <span class="font-mono text-blue-400 text-xs px-1.5 py-0.5 rounded" style="background:rgba(37,99,235,0.15);border:1px solid rgba(37,99,235,0.3);font-size:0.62rem;">v3.0</span>
+          </div>
+          <div class="text-slate-500 font-mono" style="font-size:0.6rem;letter-spacing:0.05em;">AUTOMATED LICENSE PLATE RECOGNITION</div>
+        </div>
+      </div>
+      <!-- Right: clock + status -->
+      <div class="flex items-center gap-5">
+        <div class="text-right hidden sm:block">
+          <div id="live-clock" class="font-mono text-slate-200 font-medium" style="font-size:0.9rem;letter-spacing:0.05em;">--:--:--</div>
+          <div class="font-mono text-slate-500" style="font-size:0.58rem;letter-spacing:0.06em;" id="live-date">--- -- ----</div>
+        </div>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);">
+          <div class="rounded-full bg-emerald-400 animate-pulse-dot" style="width:7px;height:7px;"></div>
+          <span class="font-mono text-emerald-400 font-medium" style="font-size:0.62rem;letter-spacing:0.08em;">SYSTEM ONLINE</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════ MAIN ═══════════════════════════════════ -->
+  <main class="max-w-4xl mx-auto px-5 py-8">
+
+    <!-- Page title row -->
+    <div class="mb-7">
+      <h1 class="text-slate-100 font-semibold mb-1" style="font-size:1.15rem;letter-spacing:-0.01em;">Vehicle Processing Console</h1>
+      <p class="text-slate-500" style="font-size:0.78rem;">Select a terminal, upload a vehicle image, and submit for plate recognition and database lookup.</p>
+    </div>
+
+    <!-- ─── GATE SELECTOR ─── -->
+    <div class="mb-6">
+      <div class="flex items-center gap-2 mb-3">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg>
+        <span class="text-slate-400 font-medium uppercase tracking-wider" style="font-size:0.65rem;letter-spacing:0.1em;">Terminal Selection</span>
+      </div>
+      <div class="grid grid-cols-2 gap-3" id="gate-selector">
+        <!-- Entry Gate -->
+        <div class="gate-card active" data-gate="in" onclick="selectGate('in')">
+          <div class="flex items-start gap-3">
+            <div class="gate-icon text-blue-500 mt-0.5">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+                <polyline points="10 17 15 12 10 7"/>
+                <line x1="15" y1="12" x2="3" y2="12"/>
+              </svg>
+            </div>
+            <div>
+              <div class="gate-label font-semibold text-blue-300 mb-0.5" style="font-size:0.82rem;">Entry Terminal</div>
+              <div class="font-mono text-slate-500" style="font-size:0.62rem;letter-spacing:0.06em;">GATE · IN</div>
+            </div>
+          </div>
+          <div class="absolute top-2 right-2" id="check-in" style="display:flex;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+        <!-- Exit Gate -->
+        <div class="gate-card" data-gate="out" onclick="selectGate('out')">
+          <div class="flex items-start gap-3">
+            <div class="gate-icon text-slate-500 mt-0.5">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </div>
+            <div>
+              <div class="gate-label font-semibold text-slate-400 mb-0.5" style="font-size:0.82rem;">Exit Terminal</div>
+              <div class="font-mono text-slate-500" style="font-size:0.62rem;letter-spacing:0.06em;">GATE · OUT</div>
+            </div>
+          </div>
+          <div class="absolute top-2 right-2" id="check-out" style="display:none;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── UPLOAD ZONE ─── -->
+    <div class="mb-6">
+      <div class="flex items-center gap-2 mb-3">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="text-slate-400 font-medium uppercase tracking-wider" style="font-size:0.65rem;letter-spacing:0.1em;">Vehicle Image</span>
+      </div>
+
+      <div class="upload-zone" id="upload-zone" onclick="triggerFileInput()">
+        <input type="file" id="file-input" accept="image/*" class="sr-only" onchange="handleFileSelect(event)" />
+
+        <!-- Idle state -->
+        <div id="upload-idle" class="flex flex-col items-center justify-center py-10 px-6 text-center">
+          <div class="mb-4 rounded-xl p-3" style="background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.15);">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+          </div>
+          <p class="text-slate-300 font-medium mb-1" style="font-size:0.82rem;">Drag &amp; drop image here, or click to browse</p>
+          <p class="text-slate-600 font-mono" style="font-size:0.65rem;">SUPPORTED: JPG · PNG · WEBP · BMP</p>
+        </div>
+
+        <!-- File selected state -->
+        <div id="upload-preview" class="hidden flex items-center gap-4 py-4 px-5">
+          <div class="relative flex-shrink-0">
+            <img id="preview-img" src="" alt="Preview" class="rounded-lg object-cover" style="width:64px;height:64px;border:1px solid #1d4ed8;" />
+            <div class="absolute -top-1 -right-1 rounded-full bg-blue-600 flex items-center justify-center" style="width:16px;height:16px;">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div id="file-name" class="text-slate-200 font-medium truncate" style="font-size:0.82rem;"></div>
+            <div id="file-size" class="font-mono text-slate-500 mt-0.5" style="font-size:0.65rem;"></div>
+            <div class="font-mono text-blue-400 mt-1" style="font-size:0.6rem;letter-spacing:0.06em;">IMAGE LOADED — READY TO PROCESS</div>
+          </div>
+          <button onclick="clearFile(event)" class="flex-shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 transition-colors">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── ACTION BUTTON ─── -->
+    <button id="process-btn" class="action-btn w-full rounded-xl font-semibold text-white flex items-center justify-center gap-2.5 py-3.5" style="font-size:0.85rem;letter-spacing:0.01em;" onclick="processVehicle()">
+      <span id="btn-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          <path d="M11 8v6M8 11h6"/>
+        </svg>
+      </span>
+      <span id="btn-text">Process Vehicle Data</span>
+    </button>
+
+    <!-- ─── SEPARATOR ─── -->
+    <div class="section-sep my-8"></div>
+
+    <!-- ─── RESULTS SECTION ─── -->
+    <div>
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span class="text-slate-400 font-medium uppercase tracking-wider" style="font-size:0.65rem;letter-spacing:0.1em;">Recognition Log</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="export-btn flex items-center gap-1.5 px-3 py-1 rounded font-mono" style="font-size:0.62rem;letter-spacing:0.05em;" onclick="window.open('http://127.0.0.1:8000/export_report', '_blank')">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            EXPORT CSV
+          </button>
+          <div id="result-count-badge" class="hidden font-mono text-slate-500 px-2 py-0.5 rounded" style="font-size:0.62rem;background:#111827;border:1px solid #1e293b;">
+            <span id="result-count">0</span> RECORD(S)
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div id="results-empty" class="flex flex-col items-center justify-center py-14 rounded-xl" style="border:1px dashed #1a2744;background:#080e1c;">
+        <div class="mb-3 opacity-30">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+            <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+          </svg>
+        </div>
+        <p class="text-slate-600 font-medium" style="font-size:0.78rem;">No records processed yet</p>
+        <p class="text-slate-700 font-mono mt-1" style="font-size:0.62rem;">SUBMIT AN IMAGE TO BEGIN</p>
+      </div>
+
+      <!-- Results container -->
+      <div id="results-container" class="space-y-4"></div>
+    </div>
+
+  </main>
+
+  <!-- ─── TOAST CONTAINER ─── -->
+  <div id="toast-container" class="fixed bottom-6 left-1/2 z-50 flex flex-col items-center gap-2" style="transform:translateX(-50%);pointer-events:none;min-width:260px;max-width:420px;width:90%;"></div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════
+    // STATE
+    // ═══════════════════════════════════════════════════════
+    let selectedGate = 'in';
+    let selectedFile = null;
+    let resultCount = 0;
+
+    // ═══════════════════════════════════════════════════════
+    // CLOCK
+    // ═══════════════════════════════════════════════════════
+    function updateClock() {
+      const now = new Date();
+      const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+      const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const h = String(now.getHours()).padStart(2,'0');
+      const m = String(now.getMinutes()).padStart(2,'0');
+      const s = String(now.getSeconds()).padStart(2,'0');
+      document.getElementById('live-clock').textContent = `${h}:${m}:${s}`;
+      document.getElementById('live-date').textContent =
+        `${days[now.getDay()]} ${String(now.getDate()).padStart(2,'0')} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // ═══════════════════════════════════════════════════════
+    // GATE SELECTOR
+    // ═══════════════════════════════════════════════════════
+    function selectGate(gate) {
+      selectedGate = gate;
+      document.querySelectorAll('.gate-card').forEach(card => {
+        const isActive = card.dataset.gate === gate;
+        card.classList.toggle('active', isActive);
+        const label = card.querySelector('.gate-label');
+        label.classList.toggle('text-blue-300', isActive);
+        label.classList.toggle('text-slate-400', !isActive);
+        const icon = card.querySelector('.gate-icon');
+        icon.classList.toggle('text-blue-500', isActive);
+        icon.classList.toggle('text-slate-500', !isActive);
+      });
+      document.getElementById('check-in').style.display  = gate === 'in'  ? 'flex' : 'none';
+      document.getElementById('check-out').style.display = gate === 'out' ? 'flex' : 'none';
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // FILE HANDLING
+    // ═══════════════════════════════════════════════════════
+    function triggerFileInput() { document.getElementById('file-input').click(); }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      setFile(file);
+    }
+
+    function setFile(file) {
+      selectedFile = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('preview-img').src = e.target.result;
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('file-size').textContent = formatBytes(file.size);
+        document.getElementById('upload-idle').classList.add('hidden');
+        document.getElementById('upload-preview').classList.remove('hidden');
+        document.getElementById('upload-preview').classList.add('flex');
+        document.getElementById('upload-zone').classList.add('has-file');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearFile(e) {
+      e.stopPropagation();
+      selectedFile = null;
+      document.getElementById('file-input').value = '';
+      document.getElementById('upload-idle').classList.remove('hidden');
+      document.getElementById('upload-preview').classList.add('hidden');
+      document.getElementById('upload-preview').classList.remove('flex');
+      document.getElementById('upload-zone').classList.remove('has-file');
+    }
+
+    function formatBytes(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
+      return `${(bytes/1024/1024).toFixed(2)} MB`;
+    }
+
+    // Drag & drop
+    const zone = document.getElementById('upload-zone');
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) setFile(file);
+      else showToast('error', 'Invalid File', 'Please drop a valid image file.');
+    });
+
+    // ═══════════════════════════════════════════════════════
+    // PROCESS VEHICLE
+    // ═══════════════════════════════════════════════════════
+    async function processVehicle() {
+      if (!selectedFile) { showToast('error', 'No Image', 'Please upload a vehicle image first.'); return; }
+
+      setLoadingState(true);
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('gate', selectedGate);
+
+      try {
+        const response = await fetch('http://127.0.0.1:8000/process_vehicle', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => 'Unknown error');
+          throw new Error(`HTTP ${response.status}: ${errText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.status !== 'success' || !Array.isArray(data.results) || data.results.length === 0) {
+          throw new Error(data.message || 'No results returned from the recognition engine.');
+        }
+
+        // Hide empty state
+        document.getElementById('results-empty').style.display = 'none';
+
+        // Render each result
+        data.results.forEach(result => renderResultCard(result));
+
+        showToast('success', 'Processing Complete', `${data.results.length} plate(s) identified successfully.`);
+      } catch (err) {
+        console.error(err);
+        showToast('error', 'Processing Failed', err.message || 'Could not reach the backend server.');
+        renderErrorCard(err.message);
+      } finally {
+        setLoadingState(false);
+      }
+    }
+
+    function setLoadingState(loading) {
+      const btn = document.getElementById('process-btn');
+      const icon = document.getElementById('btn-icon');
+      const text = document.getElementById('btn-text');
+      btn.disabled = loading;
+      if (loading) {
+        icon.innerHTML = '<div class="spinner"></div>';
+        text.textContent = 'Analyzing Image…';
+      } else {
+        icon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/></svg>`;
+        text.textContent = 'Process Vehicle Data';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // RENDER RESULT CARD
+    // ═══════════════════════════════════════════════════════
+    function renderResultCard(result) {
+      resultCount++;
+      updateResultCount();
+
+      const db = result.database_response || {};
+      const isVip      = db.is_vip === true;
+      const isWarning  = db.status === 'warning';
+      const isExit     = selectedGate === 'out';
+
+      // Determine badge type
+      let badgeClass, badgeLabel, accentClass;
+      if (isVip) {
+        badgeClass = 'badge-vip'; badgeLabel = 'VIP VEHICLE'; accentClass = 'accent-vip';
+      } else if (isWarning) {
+        badgeClass = 'badge-warning'; badgeLabel = 'ACTION REQUIRED'; accentClass = 'accent-warning';
+      } else {
+        badgeClass = 'badge-standard'; badgeLabel = 'STANDARD ACCESS'; accentClass = 'accent-standard';
+      }
+
+      const plate = result.plate_number || 'UNKNOWN';
+      const terminalLabel = selectedGate === 'in' ? 'Entry Terminal (IN)' : 'Exit Terminal (OUT)';
+      const timestamp = new Date().toLocaleString('en-GB', { dateStyle:'medium', timeStyle:'medium' });
+      const entryTime = db.entry_time || '—';
+      const duration  = db.duration_hours != null ? `${db.duration_hours.toFixed(2)} hrs` : null;
+      const fee       = db.fee_egp != null ? `${db.fee_egp.toFixed(2)} EGP` : null;
+      const message   = db.message || 'No additional information.';
+
+      const card = document.createElement('div');
+      card.className = 'result-card';
+
+      card.innerHTML = `
+        <!-- Accent bar -->
+        <div class="${accentClass}" style="height:3px;"></div>
+
+        <!-- Card header -->
+        <div class="flex items-start justify-between px-5 pt-4 pb-3" style="border-bottom:1px solid #1e293b;">
+          <div class="flex items-center gap-3">
+            <!-- Plate display -->
+            <div class="plate-display text-slate-100 px-4 py-2 rounded-lg" style="font-size:1.45rem;background:#070d1a;border:2px solid #1e3a5f;letter-spacing:0.15em;">
+              ${escHtml(plate)}
+            </div>
+            <!-- Badge -->
+            <span class="font-mono font-semibold rounded-md px-2.5 py-1 ${badgeClass}" style="font-size:0.6rem;letter-spacing:0.08em;">${badgeLabel}</span>
+          </div>
+          <!-- Record ID -->
+          <div class="text-right">
+            <div class="font-mono text-slate-600" style="font-size:0.6rem;letter-spacing:0.06em;">RECORD</div>
+            <div class="font-mono text-slate-400 font-medium" style="font-size:0.7rem;">#${String(resultCount).padStart(4,'0')}</div>
+          </div>
+        </div>
+
+        <!-- System log -->
+        <div class="px-5 py-3" style="border-bottom:1px solid #1e293b;">
+          <div class="flex items-center gap-1.5 mb-2">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span class="text-slate-500 font-medium uppercase tracking-wider" style="font-size:0.6rem;letter-spacing:0.1em;">System Log</span>
+          </div>
+          <div class="log-box px-3 py-2.5">
+            <span class="log-prefix">[NEXUS-ALPR]</span>&nbsp;<span class="text-slate-400">${escHtml(message)}</span>
+          </div>
+        </div>
+
+        <!-- Data rows -->
+        <div class="px-5 py-1">
+          ${dataRow('Terminal', terminalLabel)}
+          ${dataRow('Timestamp', timestamp, true)}
+          ${isExit && entryTime !== '—' ? dataRow('Entry Time', entryTime, true) : ''}
+          ${duration ? dataRow('Duration', duration, true) : ''}
+          ${fee ? dataRowFee('Calculated Fee', fee) : ''}
+        </div>
+
+        <!-- Card footer -->
+        <div class="px-5 py-2.5 flex items-center gap-2" style="background:rgba(0,0,0,0.2);">
+          <div class="rounded-full ${isVip ? 'bg-amber-400' : isWarning ? 'bg-red-400' : 'bg-emerald-400'}" style="width:6px;height:6px;"></div>
+          <span class="font-mono text-slate-600" style="font-size:0.6rem;letter-spacing:0.06em;">
+            DATABASE STATUS: ${(db.status || 'unknown').toUpperCase()}
+          </span>
+        </div>
+      `;
+
+      document.getElementById('results-container').prepend(card);
+    }
+
+    function dataRow(label, value, mono = false) {
+      return `
+        <div class="data-row flex items-center justify-between py-2.5">
+          <span class="text-slate-500" style="font-size:0.72rem;">${label}</span>
+          <span class="${mono ? 'font-mono text-slate-300' : 'text-slate-300'}" style="font-size:${mono?'0.72':'0.75'}rem;">${escHtml(value)}</span>
+        </div>
+      `;
+    }
+    function dataRowFee(label, value) {
+      return `
+        <div class="data-row flex items-center justify-between py-2.5">
+          <span class="text-slate-500" style="font-size:0.72rem;">${label}</span>
+          <span class="fee-highlight" style="font-size:0.82rem;">${escHtml(value)}</span>
+        </div>
+      `;
+    }
+
+    function renderErrorCard(message) {
+      resultCount++;
+      updateResultCount();
+      document.getElementById('results-empty').style.display = 'none';
+
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      card.innerHTML = `
+        <div class="accent-warning" style="height:3px;"></div>
+        <div class="flex items-center gap-3 px-5 py-4">
+          <div class="rounded-lg p-2.5" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <div>
+            <div class="text-red-400 font-semibold mb-0.5" style="font-size:0.82rem;">Processing Error</div>
+            <div class="font-mono text-slate-500" style="font-size:0.7rem;">${escHtml(message)}</div>
+          </div>
+        </div>
+      `;
+      document.getElementById('results-container').prepend(card);
+    }
+
+    function updateResultCount() {
+      document.getElementById('result-count').textContent = resultCount;
+      document.getElementById('result-count-badge').classList.remove('hidden');
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // TOAST SYSTEM
+    // ═══════════════════════════════════════════════════════
+    function showToast(type, title, message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+
+      const isSuccess = type === 'success';
+      const borderColor  = isSuccess ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)';
+      const bgColor      = isSuccess ? 'rgba(6,20,32,0.95)'    : 'rgba(20,6,8,0.95)';
+      const iconColor    = isSuccess ? '#34d399' : '#f87171';
+      const iconPath     = isSuccess
+        ? '<polyline points="20 6 9 17 4 12"/>'
+        : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+
+      toast.className = 'toast rounded-xl px-4 py-3 flex items-start gap-3 w-full';
+      toast.style.cssText = `background:${bgColor};border:1px solid ${borderColor};pointer-events:auto;`;
+      toast.innerHTML = `
+        <div class="flex-shrink-0 rounded-full p-1" style="background:${isSuccess ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'};">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${iconPath}</svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold" style="font-size:0.75rem;color:${isSuccess ? '#a7f3d0' : '#fca5a5'};">${escHtml(title)}</div>
+          <div class="text-slate-400 mt-0.5" style="font-size:0.68rem;">${escHtml(message)}</div>
+        </div>
+        <button onclick="this.closest('.toast').remove()" class="flex-shrink-0 text-slate-600 hover:text-slate-400 transition-colors ml-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      `;
+
+      container.appendChild(toast);
+
+      // Auto-dismiss
+      setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 280);
+      }, 4500);
+    }
+
+  </script>
+</body>
+</html>
