@@ -101,6 +101,11 @@ async def process_vehicle(gate: str = Form(...), file: UploadFile = File(...)):
     else:
         return {"status": "error", "message": "No clear license plates found in the image."}
     
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to Nexus ALPR API - System is Online 🟢"}
+
 @app.post("/add_vip")
 def add_vip(plate_number: str = Form(...), owner_name: str = Form(...)):
     result = add_new_subscriber(plate_number, owner_name)

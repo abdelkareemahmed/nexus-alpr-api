@@ -391,7 +391,7 @@
           <span class="text-slate-400 font-medium uppercase tracking-wider" style="font-size:0.65rem;letter-spacing:0.1em;">Recognition Log</span>
         </div>
         <div class="flex items-center gap-2">
-          <button class="export-btn flex items-center gap-1.5 px-3 py-1 rounded font-mono" style="font-size:0.62rem;letter-spacing:0.05em;" onclick="window.open('http://127.0.0.1:8000/export_report', '_blank')">
+          <button class="export-btn flex items-center gap-1.5 px-3 py-1 rounded font-mono" style="font-size:0.62rem;letter-spacing:0.05em;" onclick="window.open('https://abdelkareem1-nexus-alpr-api.hf.space/export_report', '_blank')">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -537,7 +537,7 @@
       formData.append('gate', selectedGate);
 
       try {
-        const response = await fetch('http://127.0.0.1:8000/process_vehicle', {
+        const response = await fetch('https://huggingface.co/spaces/abdelkareem1/nexus-alpr-api', {
           method: 'POST',
           body: formData,
         });
