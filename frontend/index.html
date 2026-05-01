@@ -537,7 +537,7 @@
       formData.append('gate', selectedGate);
 
       try {
-        const response = await fetch('https://huggingface.co/spaces/abdelkareem1/nexus-alpr-api', {
+        const response = await fetch('https://abdelkareem1-nexus-alpr-api.hf.space/process_vehicle', {
           method: 'POST',
           body: formData,
         });
